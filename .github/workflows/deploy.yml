@@ -61,9 +61,7 @@ jobs:
 
       - name: Get Instance IP
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          cd ./terraform
-          echo "INSTANCE_IP=$(terraform output -raw instance_public_ip)" >> $GITHUB_ENV
+        run: echo "INSTANCE_IP=$(terraform output -raw instance_public_ip)" >> $GITHUB_ENV
 
       - name: Wait for instance to be ready
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
