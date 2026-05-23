@@ -13,10 +13,7 @@ output "instance_private_ip" {
   value       = aws_instance.swiftpay.private_ip
 }
 
-output "security_group_id" {
-  description = "Security group ID"
-  value       = aws_security_group.swiftpay.id
-}
+
 
 output "ssh_command" {
   description = "SSH command to connect to instance"
