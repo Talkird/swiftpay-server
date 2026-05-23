@@ -40,6 +40,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
+          TF_VAR_key_pair_name: swiftpay-key
 
       - name: Terraform Plan
         run: terraform plan -out=tfplan
@@ -47,6 +48,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
+          TF_VAR_key_pair_name: swiftpay-key
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -55,3 +57,38 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
+          TF_VAR_key_pair_name: swiftpay-key
+
+      - name: Get Instance IP
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          cd ./terraform
+          echo "INSTANCE_IP=$(terraform output -raw instance_public_ip)" >> $GITHUB_ENV
+
+      - name: Wait for instance to be ready
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: sleep 30
+
+      - name: Deploy application
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY_PAIR }}" > ~/.ssh/swiftpay-key.pem
+          chmod 600 ~/.ssh/swiftpay-key.pem
+
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/swiftpay-key.pem ubuntu@${{ env.INSTANCE_IP }} <<'DEPLOY'
+            set -e
+            
+            # Install Node.js
+            curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            
+            # Clone repo and install dependencies
+            cd /home/ubuntu
+            git clone https://github.com/Talkird/swiftpay-server.git
+            cd swiftpay-server
+            npm install
+            
+            # Start the application
+            npm start > /var/log/swiftpay.log 2>&1 &
+          DEPLOY
