@@ -61,34 +61,34 @@ resource "aws_security_group" "swiftpay" {
 
 # Create EC2 instance
 resource "aws_instance" "swiftpay" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
-  key_name               = var.key_pair_name
-  vpc_security_group_ids = [aws_security_group.swiftpay.id]
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  key_name                    = var.key_pair_name
+  vpc_security_group_ids      = [aws_security_group.swiftpay.id]
   associate_public_ip_address = var.enable_public_ip
 
   # User data script to deploy Node.js app
   user_data = base64encode(<<-EOF
-              #!/bin/bash
-              set -e
-              
-              # Update system
-              apt-get update
-              apt-get upgrade -y
-              
-              # Install Node.js
-              curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              apt-get install -y nodejs
-              
-              # Clone repo and install dependencies
-              cd /home/ubuntu
-              git clone https://github.com/YOUR_GITHUB_USERNAME/swiftpay-server.git
-              cd swiftpay-server
-              npm install
-              
-              # Start the application
-              npm start > /var/log/swiftpay.log 2>&1 &
-              EOF
+    #!/bin/bash
+    set -e
+    
+    # Update system
+    apt-get update
+    apt-get upgrade -y
+    
+    # Install Node.js
+    curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    apt-get install -y nodejs
+    
+    # Clone repo and install dependencies
+    cd /home/ubuntu
+    git clone https://github.com/YOUR_GITHUB_USERNAME/swiftpay-server.git
+    cd swiftpay-server
+    npm install
+    
+    # Start the application
+    npm start > /var/log/swiftpay.log 2>&1 &
+  EOF
   )
 
   tags = {
