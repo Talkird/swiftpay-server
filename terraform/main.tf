@@ -27,12 +27,18 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+# Reference existing security group
+data "aws_security_group" "swiftpay" {
+  id = "sg-05a92da1d636fc4e4"
+}
+
 
 # Create EC2 instance
 resource "aws_instance" "swiftpay" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
   key_name                    = var.key_pair_name
+  vpc_security_group_ids      = [data.aws_security_group.swiftpay.id]
   associate_public_ip_address = var.enable_public_ip
 
   # User data script - basic system setup
