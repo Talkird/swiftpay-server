@@ -57,7 +57,7 @@ jobs:
 
       - name: Wait for instance to be ready
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: sleep 160
+        run: sleep 5
 
       - name: Deploy application
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
