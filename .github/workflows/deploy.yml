@@ -63,7 +63,9 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY_PAIR }}" > ~/.ssh/swiftpay-key.pem
+          cat > ~/.ssh/swiftpay-key.pem << 'EOF'
+          ${{ secrets.EC2_KEY_PAIR }}
+          EOF
           chmod 600 ~/.ssh/swiftpay-key.pem
 
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/swiftpay-key.pem ubuntu@${{ env.INSTANCE_IP }} <<'DEPLOY'
