@@ -47,9 +47,7 @@ jobs:
 
       - name: Run Infracost Inspect
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          curl -L https://github.com/infracost/infracost/releases/download/v0.10.26/infracost-linux-amd64.tar.gz | tar xz
-          ./infracost inspect --json > infracost-inspect.json
+        run: infracost inspect --json > infracost-inspect.json
 
       - name: Send Infracost Data to Lambda
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
