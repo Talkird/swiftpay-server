@@ -87,5 +87,6 @@ jobs:
             npm install
             
             # Start the application
-            npm start > ~/swiftpay.log 2>&1 &
+            cd src
+            node app.js > app.log 2>&1 &
           DEPLOY
