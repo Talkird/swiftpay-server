@@ -63,7 +63,7 @@ jobs:
         run: |
           curl -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/analyze \
             -H "Content-Type: application/json" \
-            -d @infracost-inspect.json
+            -d "$(cat infracost-inspect.json)"
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
