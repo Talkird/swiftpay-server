@@ -45,11 +45,17 @@ jobs:
         env:
           TF_VAR_key_pair_name: swiftpay-key
 
+      - name: Install Infracost
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
+
+      - name: Run Infracost Scan
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: infracost scan .
+
       - name: Run Infracost Inspect
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
-          infracost inspect --json > infracost-inspect.json
+        run: infracost inspect --json > infracost-inspect.json
 
       - name: Send Infracost Data to Lambda
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
