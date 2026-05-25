@@ -49,10 +49,6 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
 
-      - name: Configure Infracost API Key
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: infracost configure set api_key ${{ secrets.INFRACOST_CLI_AUTHENTICATION_TOKEN }}
-
       - name: Run Infracost Scan
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: infracost scan . --json > infracost-inspect.json
