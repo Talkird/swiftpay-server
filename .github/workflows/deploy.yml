@@ -61,9 +61,9 @@ jobs:
       - name: Send Infracost Data to Lambda
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          curl -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/analyze \
+          cat infracost-inspect.json | curl -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/analyze \
             -H "Content-Type: application/json" \
-            -d "$(cat infracost-inspect.json)"
+            -d @-
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
