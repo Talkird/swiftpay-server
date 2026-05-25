@@ -47,7 +47,9 @@ jobs:
 
       - name: Run Infracost Inspect
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: infracost inspect --json > infracost-inspect.json
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
+          infracost inspect --json > infracost-inspect.json
 
       - name: Send Infracost Data to Lambda
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
