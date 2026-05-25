@@ -77,8 +77,13 @@ jobs:
             
             # Clone repo and install dependencies
             cd /home/ubuntu
-            git clone https://github.com/Talkird/swiftpay-server.git
-            cd swiftpay-server
+            if [ -d swiftpay-server ]; then
+              cd swiftpay-server
+              git pull origin main
+            else
+              git clone https://github.com/Talkird/swiftpay-server.git
+              cd swiftpay-server
+            fi
             npm install
             
             # Start the application
