@@ -45,6 +45,19 @@ jobs:
         env:
           TF_VAR_key_pair_name: swiftpay-key
 
+      - name: Run Infracost Inspect
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          curl -L https://github.com/infracost/infracost/releases/download/v0.10.26/infracost-linux-amd64.tar.gz | tar xz
+          ./infracost inspect --json > infracost-inspect.json
+
+      - name: Send Infracost Data to Lambda
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          curl -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/analyze \
+            -H "Content-Type: application/json" \
+            -d @infracost-inspect.json
+
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan
@@ -88,5 +101,6 @@ jobs:
             
             # Start the application
             cd src
+            killall node
             node app.js > app.log 2>&1 &
           DEPLOY
