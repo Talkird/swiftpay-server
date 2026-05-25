@@ -54,6 +54,10 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: infracost scan . --json > infracost-inspect.json
 
+      - name: Debug Infracost Output
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: cat infracost-inspect.json
+
       - name: Send Infracost Data to Lambda
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
