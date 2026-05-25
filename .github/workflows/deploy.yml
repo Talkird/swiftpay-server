@@ -50,11 +50,6 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
 
-      - name: Infracost Auth Login
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: infracost auth login --oauth-use-device-flow
-        continue-on-error: true
-
       - name: Run Infracost Scan
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: infracost scan .
