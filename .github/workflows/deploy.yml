@@ -245,7 +245,7 @@ jobs:
               "    fi",
               "  else",
               "    echo \"Cloning repository from GitHub...\"",
-              "    if git clone --depth 1 https://github.com/losau/swiftpay-server.git 2>&1; then",
+              "    if git clone --depth 1 https://github.com/Talkird/swiftpay-server.git 2>&1; then",
               "      cd swiftpay-server || { echo \"Error: cd swiftpay-server after clone failed\"; break; }",
               "      echo \"✓ Repository cloned\"",
               "      CLONE_SUCCESS=true",
