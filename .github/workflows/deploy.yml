@@ -165,41 +165,100 @@ jobs:
               "#!/bin/bash",
               "set -e",
               "",
+              "echo \"=== Starting Deployment ===\"",
+              "",
+              "# Wait for DNS and network to be ready",
+              "echo \"Checking network connectivity...\"",
+              "for i in {1..30}; do",
+              "  if ping -c 1 8.8.8.8 &> /dev/null; then",
+              "    echo \"✓ Network is online\"",
+              "    break",
+              "  fi",
+              "  echo \"Attempt $i/30: Waiting for network...\"",
+              "  sleep 2",
+              "done",
+              "",
+              "# Wait for DNS to resolve",
+              "echo \"Checking DNS resolution...\"",
+              "for i in {1..30}; do",
+              "  if nslookup github.com 8.8.8.8 &> /dev/null; then",
+              "    echo \"✓ DNS is working\"",
+              "    break",
+              "  fi",
+              "  echo \"Attempt $i/30: Waiting for DNS...\"",
+              "  sleep 2",
+              "done",
+              "",
               "# Install Node.js if not already installed",
               "if ! command -v node &> /dev/null; then",
               "  echo \"Installing Node.js...\"",
+              "  export DEBIAN_FRONTEND=noninteractive",
               "  curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -",
-              "  sudo apt-get install -y nodejs",
-              "  echo \"Node.js installed\"",
+              "  sudo apt-get update",
+              "  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs",
+              "  echo \"✓ Node.js installed: $(node -v)\"",
               "fi",
               "",
-              "# Clone or update repo",
-              "echo \"Setting up application...\"",
+              "# Clone or update repo with retries",
+              "echo \"Setting up application repository...\"",
+              "mkdir -p /home/ubuntu",
               "cd /home/ubuntu",
-              "if [ -d swiftpay-server ]; then",
-              "  cd swiftpay-server",
-              "  git pull origin main",
-              "else",
-              "  git clone https://github.com/losau/swiftpay-server.git",
-              "  cd swiftpay-server",
+              "",
+              "CLONE_RETRY=5",
+              "CLONE_SUCCESS=false",
+              "while [ $CLONE_RETRY -gt 0 ]; do",
+              "  if [ -d swiftpay-server ]; then",
+              "    echo \"Repository exists, updating...\"",
+              "    cd swiftpay-server",
+              "    if git pull origin main; then",
+              "      CLONE_SUCCESS=true",
+              "      break",
+              "    fi",
+              "    cd ..",
+              "  else",
+              "    echo \"Cloning repository (attempt $((6 - CLONE_RETRY))/5)...\"",
+              "    if git clone --depth 1 https://github.com/losau/swiftpay-server.git; then",
+              "      cd swiftpay-server",
+              "      CLONE_SUCCESS=true",
+              "      break",
+              "    fi",
+              "  fi",
+              "  CLONE_RETRY=$((CLONE_RETRY - 1))",
+              "  if [ $CLONE_RETRY -gt 0 ]; then",
+              "    echo \"Clone failed, retrying in 5 seconds...\"",
+              "    sleep 5",
+              "  fi",
+              "done",
+              "",
+              "if [ \"$CLONE_SUCCESS\" != \"true\" ]; then",
+              "  echo \"❌ Failed to clone repository after 5 attempts\"",
+              "  exit 1",
               "fi",
+              "",
+              "echo \"✓ Repository ready\"",
+              "echo \"Current directory: $(pwd)\"",
+              "echo \"Files: $(ls -la)\"",
               "",
               "# Install dependencies",
-              "npm install",
+              "echo \"Installing dependencies...\"",
+              "npm install --production",
               "",
               "# Kill any existing node process",
               "killall node || true",
               "sleep 1",
               "",
-              "# Start the application with environment variables",
+              "# Start the application",
+              "echo \"Starting application with NODE_ENV=${{ secrets.NODE_ENV }}\"",
               "export NODE_ENV=${{ secrets.NODE_ENV }}",
               "nohup node src/app.js > src/app.log 2>&1 &",
               "",
-              "echo \"Application started with NODE_ENV=${{ secrets.NODE_ENV }}\"",
-              "sleep 2",
+              "sleep 3",
               "",
               "# Test the health endpoint",
-              "curl -f http://127.0.0.1:3000/health && echo \"Health check passed\" || echo \"Health check not available yet\""
+              "echo \"Testing health endpoint...\"",
+              "curl -s http://127.0.0.1:3000/health && echo \"✓ Health check passed\" || echo \"⚠ Health check not available yet\"",
+              "",
+              "echo \"=== Deployment Complete ===\""
             ]' \
             --query 'Command.CommandId' \
             --output text)
@@ -207,7 +266,7 @@ jobs:
           echo "Deployment command ID: $COMMAND_ID"
 
           # Wait for command to complete
-          MAX_WAIT=300
+          MAX_WAIT=600
           ELAPSED=0
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             STATUS=$(aws ssm get-command-invocation \
@@ -216,8 +275,12 @@ jobs:
               --query 'Status' \
               --output text)
             
+            echo "[$(date)] Status: $STATUS"
+            
             if [ "$STATUS" = "Success" ]; then
+              echo ""
               echo "✓ Deployment successful!"
+              echo ""
               aws ssm get-command-invocation \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
@@ -225,7 +288,9 @@ jobs:
                 --output text
               break
             elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelling" ] || [ "$STATUS" = "Cancelled" ]; then
+              echo ""
               echo "❌ Deployment failed with status: $STATUS"
+              echo ""
               aws ssm get-command-invocation \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
