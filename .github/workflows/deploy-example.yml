@@ -1,0 +1,67 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Deploy to EC2
+        env:
+          # Secrets are automatically injected as environment variables
+          PORT: ${{ secrets.PORT || '3000' }}
+          NODE_ENV: ${{ secrets.NODE_ENV || 'production' }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_KEY: ${{ secrets.EC2_KEY }}
+        run: |
+          # Save the EC2 key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Add EC2 host to known_hosts
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Deploy application with environment variables
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /opt/swiftpay
+            git pull origin main
+            npm install
+            
+            # Start application with environment variables
+            export PORT=${{ env.PORT }}
+            export NODE_ENV=${{ env.NODE_ENV }}
+            export AWS_REGION=${{ env.AWS_REGION }}
+            export LOG_LEVEL=${{ env.LOG_LEVEL }}
+            
+            # Use PM2 or systemd to manage the process
+            npm start
+          EOF
+
+      - name: Verify deployment
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_KEY: ${{ secrets.EC2_KEY }}
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "curl -f http://127.0.0.1:3000/health || exit 1"

@@ -1,0 +1,14 @@
+# SwiftPay Terraform Variables Example
+# Copy to terraform.tfvars and update with your values
+
+aws_region            = "us-east-1"
+instance_type         = "t4g.micro"
+instance_name         = "swiftpay-server"
+environment           = "dev"
+key_pair_name         = "your-key-pair-name"  # Required: Your EC2 key pair
+enable_public_ip      = false                  # SECURITY: Keep as false (uses NAT Gateway)
+vpc_cidr              = "10.0.0.0/16"
+private_subnet_cidr   = "10.0.1.0/24"
+public_subnet_cidr    = "10.0.2.0/24"
+enable_ebs_encryption = true
+enable_detailed_monitoring = true

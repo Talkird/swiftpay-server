@@ -107,40 +107,78 @@ jobs:
         env:
           TF_VAR_key_pair_name: swiftpay-key
 
-      - name: Get Instance IP
-        run: echo "INSTANCE_IP=$(terraform output -raw instance_public_ip)" >> $GITHUB_ENV
-
-      - name: Wait for instance to be ready
-        run: sleep 5
-
-      - name: Deploy application
+      - name: Get Instance Details
+        id: instance
         run: |
-          mkdir -p ~/.ssh
-          cat > ~/.ssh/swiftpay-key.pem << 'EOF'
-          ${{ secrets.EC2_KEY_PAIR }}
-          EOF
-          chmod 600 ~/.ssh/swiftpay-key.pem
+          INSTANCE_ID=$(terraform output -raw instance_id)
+          INSTANCE_IP=$(terraform output -raw instance_private_ip)
+          echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+          echo "instance_ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
 
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/swiftpay-key.pem ubuntu@${{ env.INSTANCE_IP }} <<'DEPLOY'
-            set -e
-            
-            # Install Node.js
+      - name: Deploy application via Systems Manager Session Manager
+        env:
+          NODE_ENV: ${{ secrets.NODE_ENV }}
+          INSTANCE_ID: ${{ steps.instance.outputs.instance_id }}
+        run: |
+          # Create deployment script
+          cat > /tmp/deploy.sh << 'DEPLOY_SCRIPT'
+          #!/bin/bash
+          set -e
+
+          # Install Node.js if not already installed
+          if ! command -v node &> /dev/null; then
+            echo "Installing Node.js..."
             curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
             sudo apt-get install -y nodejs
-            
-            # Clone repo and install dependencies
-            cd /home/ubuntu
-            if [ -d swiftpay-server ]; then
-              cd swiftpay-server
-              git pull origin main
-            else
-              git clone https://github.com/Talkird/swiftpay-server.git
-              cd swiftpay-server
-            fi
-            npm install
-            
-            # Start the application
-            cd src
-            killall node || true
-            node app.js > app.log 2>&1 &
-          DEPLOY
+            echo "Node.js installed"
+          fi
+
+          # Clone or update repo
+          echo "Setting up application..."
+          cd /home/ubuntu
+          if [ -d swiftpay-server ]; then
+            cd swiftpay-server
+            git pull origin main
+          else
+            git clone https://github.com/Talkird/swiftpay-server.git
+            cd swiftpay-server
+          fi
+
+          # Install dependencies
+          npm install
+
+          # Kill any existing node process
+          killall node || true
+          sleep 1
+
+          # Start the application with environment variables
+          export NODE_ENV=$NODE_ENV
+          nohup node src/app.js > src/app.log 2>&1 &
+
+          echo "Application started with NODE_ENV=$NODE_ENV"
+          sleep 2
+
+          # Test the health endpoint
+          curl -f http://127.0.0.1:3000/health && echo "Health check passed" || echo "Health check not available yet"
+          DEPLOY_SCRIPT
+
+          chmod +x /tmp/deploy.sh
+
+          # Execute deployment script via Systems Manager Session Manager
+          aws ssm start-session \
+            --target "$INSTANCE_ID" \
+            --document-name "AWS-StartInteractiveCommand" \
+            --parameters "command=['/bin/bash','/tmp/deploy.sh']"
+
+      - name: Verify Deployment
+        env:
+          INSTANCE_ID: ${{ steps.instance.outputs.instance_id }}
+        run: |
+          # Wait for app to start
+          sleep 3
+
+          # Verify via SSM
+          aws ssm start-session \
+            --target "$INSTANCE_ID" \
+            --document-name "AWS-StartInteractiveCommand" \
+            --parameters "command=['bash','-c','curl -f http://127.0.0.1:3000/health || (echo \"Health check failed\" && exit 1)']"
