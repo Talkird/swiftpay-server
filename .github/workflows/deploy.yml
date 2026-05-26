@@ -7,8 +7,9 @@ on:
     branches: [main]
 
 jobs:
-  terraform:
+  analyze:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     defaults:
       run:
@@ -47,40 +48,72 @@ jobs:
           TF_VAR_key_pair_name: swiftpay-key
 
       - name: Install Infracost
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
 
       - name: Run Infracost Scan
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: infracost scan . --json > infracost-inspect.json
 
-      - name: Debug Infracost Output
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: cat infracost-inspect.json
-
       - name: Send Infracost Data to Lambda
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           cat infracost-inspect.json | curl -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/analyze \
             -H "Content-Type: application/json" \
+            -H "X-PR-Number: ${{ github.event.pull_request.number }}" \
+            -H "X-Author: ${{ github.actor }}" \
+            -H "X-Branch: ${{ github.head_ref }}" \
             -d @-
 
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
+      INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_CLI_AUTHENTICATION_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform validate
+        env:
+          TF_VAR_key_pair_name: swiftpay-key
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+        env:
+          TF_VAR_key_pair_name: swiftpay-key
+
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan
         env:
           TF_VAR_key_pair_name: swiftpay-key
 
       - name: Get Instance IP
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: echo "INSTANCE_IP=$(terraform output -raw instance_public_ip)" >> $GITHUB_ENV
 
       - name: Wait for instance to be ready
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: sleep 5
 
       - name: Deploy application
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           mkdir -p ~/.ssh
           cat > ~/.ssh/swiftpay-key.pem << 'EOF'
