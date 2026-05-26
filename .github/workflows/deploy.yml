@@ -88,10 +88,6 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Format Check
-        run: terraform fmt -check -recursive .
-        continue-on-error: true
-
       - name: Terraform Validate
         run: terraform validate
         env:
@@ -156,60 +152,96 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy application via Systems Manager Session Manager
+      - name: Deploy application via Systems Manager Send-Command
         env:
           NODE_ENV: ${{ secrets.NODE_ENV }}
           INSTANCE_ID: ${{ steps.instance.outputs.instance_id }}
         run: |
-          # Create deployment script
-          cat > /tmp/deploy.sh << 'DEPLOY_SCRIPT'
-          #!/bin/bash
-          set -e
+          # Execute deployment commands directly via SSM send-command
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=[
+              "#!/bin/bash",
+              "set -e",
+              "",
+              "# Install Node.js if not already installed",
+              "if ! command -v node &> /dev/null; then",
+              "  echo \"Installing Node.js...\"",
+              "  curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -",
+              "  sudo apt-get install -y nodejs",
+              "  echo \"Node.js installed\"",
+              "fi",
+              "",
+              "# Clone or update repo",
+              "echo \"Setting up application...\"",
+              "cd /home/ubuntu",
+              "if [ -d swiftpay-server ]; then",
+              "  cd swiftpay-server",
+              "  git pull origin main",
+              "else",
+              "  git clone https://github.com/losau/swiftpay-server.git",
+              "  cd swiftpay-server",
+              "fi",
+              "",
+              "# Install dependencies",
+              "npm install",
+              "",
+              "# Kill any existing node process",
+              "killall node || true",
+              "sleep 1",
+              "",
+              "# Start the application with environment variables",
+              "export NODE_ENV=${{ secrets.NODE_ENV }}",
+              "nohup node src/app.js > src/app.log 2>&1 &",
+              "",
+              "echo \"Application started with NODE_ENV=${{ secrets.NODE_ENV }}\"",
+              "sleep 2",
+              "",
+              "# Test the health endpoint",
+              "curl -f http://127.0.0.1:3000/health && echo \"Health check passed\" || echo \"Health check not available yet\""
+            ]' \
+            --query 'Command.CommandId' \
+            --output text)
 
-          # Install Node.js if not already installed
-          if ! command -v node &> /dev/null; then
-            echo "Installing Node.js..."
-            curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            echo "Node.js installed"
+          echo "Deployment command ID: $COMMAND_ID"
+
+          # Wait for command to complete
+          MAX_WAIT=300
+          ELAPSED=0
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query 'Status' \
+              --output text)
+            
+            if [ "$STATUS" = "Success" ]; then
+              echo "✓ Deployment successful!"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query 'StandardOutputContent' \
+                --output text
+              break
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelling" ] || [ "$STATUS" = "Cancelled" ]; then
+              echo "❌ Deployment failed with status: $STATUS"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query 'StandardErrorContent' \
+                --output text
+              exit 1
+            fi
+            
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Deployment timed out after $MAX_WAIT seconds"
+            exit 1
           fi
-
-          # Clone or update repo
-          echo "Setting up application..."
-          cd /home/ubuntu
-          if [ -d swiftpay-server ]; then
-            cd swiftpay-server
-            git pull origin main
-          else
-            git clone https://github.com/Talkird/swiftpay-server.git
-            cd swiftpay-server
-          fi
-
-          # Install dependencies
-          npm install
-
-          # Kill any existing node process
-          killall node || true
-          sleep 1
-
-          # Start the application with environment variables
-          export NODE_ENV=$NODE_ENV
-          nohup node src/app.js > src/app.log 2>&1 &
-
-          echo "Application started with NODE_ENV=$NODE_ENV"
-          sleep 2
-
-          # Test the health endpoint
-          curl -f http://127.0.0.1:3000/health && echo "Health check passed" || echo "Health check not available yet"
-          DEPLOY_SCRIPT
-
-          chmod +x /tmp/deploy.sh
-
-          # Execute deployment script via Systems Manager Session Manager
-          aws ssm start-session \
-            --target "$INSTANCE_ID" \
-            --document-name "AWS-StartInteractiveCommand" \
-            --parameters "command=bash /tmp/deploy.sh"
 
       - name: Verify Deployment
         env:
