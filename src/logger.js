@@ -5,55 +5,61 @@
 
 const nodeEnv = process.env.NODE_ENV || "development";
 
-const logger = {
-  info: (message, data = {}) => {
-    const timestamp = new Date().toISOString();
-    console.log(
-      JSON.stringify({
-        level: "INFO",
-        timestamp,
-        message,
-        ...data,
-      }),
-    );
-  },
+const SENSITIVE_PATTERNS = [
+  "password",
+  "secret",
+  "token",
+  "key",
+  "credential",
+  "aws",
+  "auth",
+  "cookie",
+];
 
-  error: (message, data = {}) => {
-    const timestamp = new Date().toISOString();
-    console.error(
-      JSON.stringify({
-        level: "ERROR",
-        timestamp,
-        message,
-        ...data,
-      }),
-    );
-  },
+function redact(obj) {
+  if (obj == null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(redact);
 
-  warn: (message, data = {}) => {
-    const timestamp = new Date().toISOString();
-    console.warn(
-      JSON.stringify({
-        level: "WARN",
-        timestamp,
-        message,
-        ...data,
-      }),
-    );
-  },
-
-  debug: (message, data = {}) => {
-    if (nodeEnv === "development") {
-      const timestamp = new Date().toISOString();
-      console.log(
-        JSON.stringify({
-          level: "DEBUG",
-          timestamp,
-          message,
-          ...data,
-        }),
-      );
+  const out = {};
+  for (const k of Object.keys(obj)) {
+    try {
+      const v = obj[k];
+      const lk = k.toLowerCase();
+      if (SENSITIVE_PATTERNS.some((p) => lk.includes(p))) {
+        out[k] = "[REDACTED]";
+      } else if (typeof v === "object" && v !== null) {
+        out[k] = redact(v);
+      } else {
+        out[k] = v;
+      }
+    } catch (e) {
+      out[k] = "[UNAVAILABLE]";
     }
+  }
+  return out;
+}
+
+function emit(level, message, data = {}) {
+  const timestamp = new Date().toISOString();
+  const safe = redact(data);
+  const payload = {
+    level,
+    timestamp,
+    message,
+    ...safe,
+  };
+
+  const out = JSON.stringify(payload);
+  if (level === "ERROR") console.error(out);
+  else console.log(out);
+}
+
+const logger = {
+  info: (message, data = {}) => emit("INFO", message, data),
+  error: (message, data = {}) => emit("ERROR", message, data),
+  warn: (message, data = {}) => emit("WARN", message, data),
+  debug: (message, data = {}) => {
+    if (nodeEnv === "development") emit("DEBUG", message, data);
   },
 };
 

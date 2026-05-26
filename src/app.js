@@ -8,7 +8,27 @@ const port = process.env.PORT || 3000;
 const nodeEnv = process.env.NODE_ENV || "development";
 
 // Security Middleware
-app.use(helmet()); // Set security HTTP headers
+// Hide framework fingerprint
+app.disable("x-powered-by");
+
+// Set secure HTTP headers
+app.use(helmet());
+
+// Content Security Policy - API only (minimal restrictive policy)
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      imgSrc: ["'self'", "data:"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  }),
+);
+
+// Note: CORS is managed externally (AWS), so no in-app CORS handling here.
 
 // Request logging
 app.use((req, res, next) => {
