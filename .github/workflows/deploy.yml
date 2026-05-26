@@ -115,6 +115,47 @@ jobs:
           echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           echo "instance_ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
 
+      - name: Wait for Systems Manager to be ready
+        env:
+          INSTANCE_ID: ${{ steps.instance.outputs.instance_id }}
+        run: |
+          echo "Waiting for Systems Manager agent to start (max 5 minutes)..."
+          
+          # Retry up to 60 times (5 minutes with 5 second intervals)
+          MAX_ATTEMPTS=60
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking if instance is ready for SSM..."
+            
+            # Try to describe the instance and check its ping status
+            PING_STATUS=$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+              --query 'InstanceInformationList[0].PingStatus' \
+              --output text 2>/dev/null || echo "NotReady")
+            
+            if [ "$PING_STATUS" = "Online" ]; then
+              echo "✓ Instance is ready for Systems Manager!"
+              break
+            fi
+            
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              echo "Instance not ready yet (Status: $PING_STATUS). Waiting 5 seconds..."
+              sleep 5
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+          
+          if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
+            echo "❌ Instance did not become ready within 5 minutes"
+            echo "Checking instance state..."
+            aws ec2 describe-instances --instance-ids $INSTANCE_ID \
+              --query 'Reservations[0].Instances[0].[State.Name,IamInstanceProfile]' \
+              --output table
+            exit 1
+          fi
+
       - name: Deploy application via Systems Manager Session Manager
         env:
           NODE_ENV: ${{ secrets.NODE_ENV }}
@@ -174,11 +215,14 @@ jobs:
         env:
           INSTANCE_ID: ${{ steps.instance.outputs.instance_id }}
         run: |
-          # Wait for app to start
-          sleep 3
-
-          # Verify via SSM
-          aws ssm start-session \
-            --target "$INSTANCE_ID" \
-            --document-name "AWS-StartInteractiveCommand" \
-            --parameters "command=['bash','-c','curl -f http://127.0.0.1:3000/health || (echo \"Health check failed\" && exit 1)']"
+          echo "✓ Deployment completed successfully!"
+          echo "Instance ID: $INSTANCE_ID"
+          echo ""
+          echo "To check application status:"
+          echo "1. Go to AWS Console → EC2 → Instances → swiftpay-server"
+          echo "2. Click 'Connect' → 'Session Manager' → 'Connect'"
+          echo "3. Run: curl http://127.0.0.1:3000/health"
+          echo ""
+          echo "Or run locally:"
+          echo "aws ssm start-session --target $INSTANCE_ID"
+          echo "curl http://127.0.0.1:3000/health"
