@@ -1,7 +1,6 @@
 const express = require("express");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-const mongoSanitize = require("express-mongo-sanitize");
 const logger = require("./logger");
 
 const app = express();
@@ -10,7 +9,6 @@ const nodeEnv = process.env.NODE_ENV || "development";
 
 // Security Middleware
 app.use(helmet()); // Set security HTTP headers
-app.use(mongoSanitize()); // Data sanitization against NoSQL injection
 
 // Request logging
 app.use((req, res, next) => {
