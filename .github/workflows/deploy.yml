@@ -34,7 +34,7 @@ jobs:
         run: terraform init
 
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -recursive .
         continue-on-error: true
 
       - name: Terraform Validate
@@ -89,7 +89,7 @@ jobs:
         run: terraform init
 
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -recursive .
         continue-on-error: true
 
       - name: Terraform Validate
@@ -209,7 +209,7 @@ jobs:
           aws ssm start-session \
             --target "$INSTANCE_ID" \
             --document-name "AWS-StartInteractiveCommand" \
-            --parameters "command=['/bin/bash','/tmp/deploy.sh']"
+            --parameters "command=bash /tmp/deploy.sh"
 
       - name: Verify Deployment
         env:
