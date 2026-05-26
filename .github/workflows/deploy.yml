@@ -108,6 +108,6 @@ jobs:
             
             # Start the application
             cd src
-            killall node
+            killall node || true
             node app.js > app.log 2>&1 &
           DEPLOY
