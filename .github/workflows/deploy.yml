@@ -120,11 +120,11 @@ jobs:
           INSTANCE_ID: ${{ steps.instance.outputs.instance_id }}
         run: |
           echo "Waiting for Systems Manager agent to start (max 5 minutes)..."
-          
+
           # Retry up to 60 times (5 minutes with 5 second intervals)
           MAX_ATTEMPTS=60
           ATTEMPT=1
-          
+
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
             echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking if instance is ready for SSM..."
             
@@ -146,7 +146,7 @@ jobs:
             
             ATTEMPT=$((ATTEMPT + 1))
           done
-          
+
           if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
             echo "❌ Instance did not become ready within 5 minutes"
             echo "Checking instance state..."
