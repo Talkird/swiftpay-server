@@ -11,14 +11,14 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Get latest Ubuntu 22.04 ARM64 AMI (matches t4g.micro architecture)
+# Get latest Ubuntu 22.04 x86_64 AMI (matches t3.micro architecture)
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-arm64-server-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
 
   filter {
