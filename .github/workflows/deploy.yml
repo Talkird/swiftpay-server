@@ -9,7 +9,7 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
 
     defaults:
       run:
@@ -61,6 +61,26 @@ jobs:
             -H "X-Author: ${{ github.actor }}" \
             -H "X-Branch: ${{ github.head_ref }}" \
             -d @-
+
+  update_pr_status:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+
+    steps:
+      - name: Update pull request status in MongoDB
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          if [ "$PR_MERGED" = "true" ]; then
+            STATUS="merged"
+          else
+            STATUS="closed"
+          fi
+
+          curl -sS -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
+            -H "Content-Type: application/json" \
+            -d "{\"prNumber\":\"$PR_NUMBER\",\"status\":\"$STATUS\"}"
 
   deploy:
     runs-on: ubuntu-latest
