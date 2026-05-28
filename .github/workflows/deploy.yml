@@ -89,7 +89,8 @@ jobs:
 
       - name: Update pull request status in MongoDB
         run: |
-          curl -sS -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
+          curl --fail-with-body --silent --show-error --location --retry 3 --retry-all-errors \
+            -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
             -H "Content-Type: application/json" \
             -d "{\"prNumber\":\"${{ steps.status.outputs.pr_number }}\",\"status\":\"${{ steps.status.outputs.status }}\"}"
 
