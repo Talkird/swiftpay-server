@@ -64,7 +64,7 @@ jobs:
 
   update_pr_status:
     runs-on: ubuntu-latest
-    if: (github.event_name == 'pull_request' && github.event.action == 'closed') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
 
     permissions:
       contents: read
@@ -74,41 +74,20 @@ jobs:
       - name: Determine pull request status
         id: status
         env:
-          GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_MERGED: ${{ github.event.pull_request.merged }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
         run: |
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            if [ "$PR_MERGED" = "true" ]; then
-              STATUS="merged"
-            else
-              STATUS="closed"
-            fi
-
-            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-            echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          PR_NUMBER=$(curl -sS \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/commits/$SHA/pulls" | jq -r '.[0].number // empty')
-
-          if [ -z "$PR_NUMBER" ]; then
-            echo "No pull request found for commit $SHA; skipping status update."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "$PR_MERGED" = "true" ]; then
+            STATUS="merged"
+          else
+            STATUS="closed"
           fi
 
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "status=merged" >> "$GITHUB_OUTPUT"
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Update pull request status in MongoDB
-        if: steps.status.outputs.skip != 'true'
         run: |
           curl -sS -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
             -H "Content-Type: application/json" \
@@ -458,3 +437,33 @@ jobs:
           echo "Or run locally:"
           echo "aws ssm start-session --target $INSTANCE_ID"
           echo "curl http://127.0.0.1:3000/health"
+
+      - name: Update merged pull request status in MongoDB
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          PR_NUMBER=$(curl -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/commits/$SHA/pulls" | jq -r '.[0].number // empty')
+
+          if [ -z "$PR_NUMBER" ]; then
+            COMMIT_MESSAGE=$(curl -sS \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/commits/$SHA" | jq -r '.commit.message // empty')
+
+            PR_NUMBER=$(printf '%s' "$COMMIT_MESSAGE" | sed -nE 's/.*\(#([0-9]+)\).*/\1/p' | head -n 1)
+          fi
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No pull request found for commit $SHA; skipping status update."
+            exit 0
+          fi
+
+          curl -sS -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
+            -H "Content-Type: application/json" \
+            -d "{\"prNumber\":\"$PR_NUMBER\",\"status\":\"merged\"}"
