@@ -74,15 +74,9 @@ jobs:
       - name: Determine pull request status
         id: status
         env:
-          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_MERGED: ${{ github.event.pull_request.merged }}
         run: |
-          if [ "$PR_MERGED" = "true" ]; then
-            STATUS="merged"
-          else
-            STATUS="closed"
-          fi
+          STATUS="closed"
 
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
