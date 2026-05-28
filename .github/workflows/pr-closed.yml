@@ -1,0 +1,32 @@
+name: PR Closed Workflow
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  update_pr_status:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Log PR close event (temporary)
+        run: |
+          echo "PR #${{ github.event.pull_request.number }} closed; merged=${{ github.event.pull_request.merged }}"
+
+      - name: Handle merged PR (no immediate status update)
+        if: ${{ github.event.pull_request.merged == true }}
+        run: |
+          echo "PR #${{ github.event.pull_request.number }} was merged — the deploy pipeline will send the 'merged' update after deployment."
+
+      - name: Handle closed (unmerged) PR — update Lambda
+        if: ${{ github.event.pull_request.merged == false }}
+        run: |
+          echo "Sending 'closed' status for PR #${{ github.event.pull_request.number }} to Lambda"
+          curl --fail-with-body --silent --show-error --location --retry 3 --retry-all-errors \
+            -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
+            -H "Content-Type: application/json" \
+            -d "{\"prNumber\":\"${{ github.event.pull_request.number }}\",\"status\":\"closed\"}"
