@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t3.small"
+  default     = "t3.micro"
 }
 
 variable "instance_name" {
@@ -17,9 +17,9 @@ variable "instance_name" {
 }
 
 variable "environment" {
-  description = "Environment (dev, staging, prod)"
+  description = "Environment (Dev, Staging, Prod)"
   type        = string
-  default     = "dev"
+  default     = "Prod"
 }
 
 variable "key_pair_name" {
