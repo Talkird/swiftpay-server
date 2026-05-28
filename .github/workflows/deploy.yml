@@ -64,23 +64,55 @@ jobs:
 
   update_pr_status:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: (github.event_name == 'pull_request' && github.event.action == 'closed') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
-      - name: Update pull request status in MongoDB
+      - name: Determine pull request status
+        id: status
         env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_MERGED: ${{ github.event.pull_request.merged }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
-          if [ "$PR_MERGED" = "true" ]; then
-            STATUS="merged"
-          else
-            STATUS="closed"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if [ "$PR_MERGED" = "true" ]; then
+              STATUS="merged"
+            else
+              STATUS="closed"
+            fi
+
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          PR_NUMBER=$(curl -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/commits/$SHA/pulls" | jq -r '.[0].number // empty')
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No pull request found for commit $SHA; skipping status update."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "status=merged" >> "$GITHUB_OUTPUT"
+
+      - name: Update pull request status in MongoDB
+        if: steps.status.outputs.skip != 'true'
+        run: |
           curl -sS -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
             -H "Content-Type: application/json" \
-            -d "{\"prNumber\":\"$PR_NUMBER\",\"status\":\"$STATUS\"}"
+            -d "{\"prNumber\":\"${{ steps.status.outputs.pr_number }}\",\"status\":\"${{ steps.status.outputs.status }}\"}"
 
   deploy:
     runs-on: ubuntu-latest
