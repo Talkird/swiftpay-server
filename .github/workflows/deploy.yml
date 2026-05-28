@@ -71,27 +71,23 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Determine pull request status
-        id: status
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_MERGED: ${{ github.event.pull_request.merged }}
+      - name: Log PR close event (temporary)
         run: |
-          if [ "$PR_MERGED" = "true" ]; then
-            STATUS="merged"
-          else
-            STATUS="closed"
-          fi
+          echo "PR #${{ github.event.pull_request.number }} closed; merged=${{ github.event.pull_request.merged }}"
 
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-
-      - name: Update pull request status in MongoDB
+      - name: Handle merged PR (no immediate status update)
+        if: ${{ github.event.pull_request.merged == true }}
         run: |
-          curl -sS -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
+          echo "PR #${{ github.event.pull_request.number }} was merged — the deploy pipeline will send the 'merged' update after deployment."
+
+      - name: Handle closed (unmerged) PR — update Lambda
+        if: ${{ github.event.pull_request.merged == false }}
+        run: |
+          echo "Sending 'closed' status for PR #${{ github.event.pull_request.number }} to Lambda"
+          curl --fail-with-body --silent --show-error --location --retry 3 --retry-all-errors \
+            -X POST https://6i0kggdgzh.execute-api.us-east-1.amazonaws.com/updatePullRequestStatus \
             -H "Content-Type: application/json" \
-            -d "{\"prNumber\":\"${{ steps.status.outputs.pr_number }}\",\"status\":\"${{ steps.status.outputs.status }}\"}"
+            -d "{\"prNumber\":\"${{ github.event.pull_request.number }}\",\"status\":\"closed\"}"
 
   deploy:
     runs-on: ubuntu-latest
